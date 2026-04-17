@@ -1,15 +1,19 @@
 import json
+from fpdf import FPDF
 
-studentData = []
-validStudentData = []
+studentData = list()
+validStudentData = list()
+canSave = True
 
 
 # ======================
 # CREATE (ADD STUDENT)
 # ======================
 def addStudent():
-    student = {}
-    grades = []
+    global canSave
+    canSave = False
+    student = dict()
+    grades = list()
 
     name = input("Student Full Name: ")
 
@@ -36,14 +40,16 @@ def showStudents(data):
 # UPDATE
 # ======================
 def updateStudent():
+    global canSave
     showStudents(studentData)
 
     index = int(input("Select student index to update: ")) - 1
 
     if 0 <= index < len(studentData):
+        canSave = False
         newName = input("New Name: ")
 
-        newGrades = []
+        newGrades = list()
         for i in range(5):
             grade = int(input(f"Subject {i+1} Grade: "))
             newGrades.append(grade)
@@ -75,12 +81,12 @@ def deleteStudent():
 # PROCESS DATA
 # ======================
 def processData(data):
-
+    global canSave
     validStudentData.clear()
 
     for student in data:
 
-        invalidGrades = []
+        invalidGrades = list()
         invalidName = False
 
         # Validate Name
@@ -91,11 +97,14 @@ def processData(data):
         # Validate Grades
         for subject, grade in enumerate(student["grades"]):
             if not 0 <= grade <= 100:
-                print(f"Invalid Grade ({student['name']} - Subject {subject+1})")
+                print(
+                    f"Invalid Grade ({student['name']} - Subject {subject+1})")
                 invalidGrades.append(grade)
 
         # If Valid
         if not invalidGrades and not invalidName:
+
+            canSave = True
 
             sumGrade = sum(student["grades"])
             avgGrade = sumGrade / len(student["grades"])
@@ -111,10 +120,17 @@ def processData(data):
                 "min": minGrade
             })
 
+        # If Not Valid
+        else:
+            canSave = False
+
+    print("Data Has Been Processed!")
 
 # ======================
 # RANKING
 # ======================
+
+
 def showRankings(data):
 
     sortedData = sorted(data, key=lambda x: x["avg"], reverse=True)
@@ -135,10 +151,14 @@ def showRankings(data):
 # SAVE FILE
 # ======================
 def saveFile():
-    with open("studentData.json", "w") as file:
-        json.dump(studentData, file, indent=4)
+    if canSave == True:
+        with open("studentData.json", "w") as file:
+            json.dump(studentData, file, indent=4)
 
-    print("Data Saved")
+        print("Data Saved")
+
+    else:
+        print("Process Data Before Saving")
 
 
 # ======================
@@ -155,6 +175,69 @@ def loadFile():
 
     except:
         print("File Not Found")
+
+# ======================
+# EXPORT FILE
+# ======================
+
+
+def exportPDF(data):
+    if canSave == True:
+        if not data:
+            print("No processed data. Run Process Data first.")
+            return
+
+        # Sort by average
+        sortedData = sorted(data, key=lambda x: x["avg"], reverse=True)
+
+        pdf = FPDF()
+        pdf.add_page()
+
+        # Title
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, "Student Report", ln=True, align="C")
+        pdf.ln(5)
+
+        # Header
+        pdf.set_font("Arial", "B", 10)
+
+        pdf.cell(15, 10, "Rank", 1)
+        pdf.cell(35, 10, "Name", 1)
+
+        for i in range(5):
+            pdf.cell(18, 10, f"Subject {i+1}", 1)
+
+        pdf.cell(20, 10, "Avg", 1)
+        pdf.cell(15, 10, "Max", 1)
+        pdf.cell(15, 10, "Min", 1)
+
+        pdf.ln()
+
+        # Data
+        pdf.set_font("Arial", "", 10)
+
+        for i, student in enumerate(sortedData):
+            pdf.cell(15, 10, str(i+1), 1)
+            pdf.cell(35, 10, student["name"], 1)
+
+            for grade in student["grades"]:
+                pdf.cell(18, 10, str(grade), 1)
+
+            pdf.cell(20, 10, f"{student['avg']:.2f}", 1)
+            pdf.cell(15, 10, str(student["max"]), 1)
+            pdf.cell(15, 10, str(student["min"]), 1)
+
+            pdf.ln()
+
+            # New page if needed
+            if pdf.get_y() > 270:
+                pdf.add_page()
+
+        pdf.output("student_report.pdf")
+        print("PDF exported!")
+
+    else:
+        print("Process Data Before Exporting")
 
 
 # ======================
@@ -174,7 +257,8 @@ def menu():
 6. Show Ranking
 7. Save File
 8. Load File
-9. Exit
+9. Export PDF
+10. Exit
 """)
 
         choice = input("Choose: ")
@@ -204,6 +288,9 @@ def menu():
             loadFile()
 
         elif choice == "9":
+            exportPDF(validStudentData)
+
+        elif choice == "10":
             break
 
         else:
