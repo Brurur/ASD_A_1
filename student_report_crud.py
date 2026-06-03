@@ -146,6 +146,31 @@ def inputGrades(name):
     return grades
 
 
+def showSubjectGrades(student):
+    grades = student.get("grades", list())
+
+    print("\n===== SUBJECT GRADES =====")
+
+    for index, subject in enumerate(SUBJECTS, start=1):
+        gradeIndex = index - 1
+
+        if gradeIndex < len(grades):
+            grade = grades[gradeIndex]
+        else:
+            grade = "-"
+
+        print(f"{index}. {subject}: {grade}")
+
+
+def ensureGradeSlots(student):
+    grades = student.setdefault("grades", list())
+
+    while len(grades) < len(SUBJECTS):
+        grades.append(0)
+
+    return grades
+
+
 def markDataChanged():
     global canSave
     canSave = False
@@ -172,6 +197,38 @@ def isValidName(name):
         return False
 
     return all(char.isalpha() or char in " .'-" for char in cleanName)
+
+
+def findProcessedStudentByName(name):
+    targetName = normalizeName(name)
+
+    for student in validStudentData:
+        if normalizeName(student["name"]) == targetName:
+            return student
+
+    return None
+
+
+def showStudentDetail(student):
+    processedStudent = findProcessedStudentByName(student["name"])
+
+    print("\n===== STUDENT DETAIL =====")
+    print(f"Name   : {student['name']}")
+
+    for index, subject in enumerate(SUBJECTS):
+        grades = student.get("grades", list())
+
+        if index < len(grades):
+            grade = grades[index]
+        else:
+            grade = "-"
+
+        print(f"{subject}: {grade}")
+
+    if processedStudent is not None:
+        print(f"AVG    : {processedStudent['avg']:.2f}")
+        print(f"MAX    : {processedStudent['max']}")
+        print(f"MIN    : {processedStudent['min']}")
 
 
 # ======================
@@ -281,6 +338,19 @@ def recursiveBinarySearch(data, targetName, left=0, right=None):
     return recursiveBinarySearch(data, targetName, middle + 1, right)
 
 
+def recursivePartialNameSearch(data, keyword, index=0, matches=None):
+    if matches is None:
+        matches = list()
+
+    if index == len(data):
+        return matches
+
+    if keyword in normalizeName(data[index]["name"]):
+        matches.append(data[index])
+
+    return recursivePartialNameSearch(data, keyword, index + 1, matches)
+
+
 # ======================
 # CREATE (ADD STUDENT)
 # ======================
@@ -334,16 +404,73 @@ def updateStudent():
     index = inputStudentIndex("Select student index to update: ")
 
     if 0 <= index < len(studentData):
-        newName = input("New Name: ").strip()
-        newGrades = inputGrades(newName)
+        student = studentData[index]
 
-        recordUndo("Update Student")
-        markDataChanged()
+        print(f"\nSelected Student: {student['name']}")
+        print("""
+===== UPDATE MENU =====
+1. Update Name Only
+2. Update One Subject Grade
+3. Clear One Subject Grade
+4. Replace All Grades
+5. Cancel
+""")
 
-        studentData[index]["name"] = newName
-        studentData[index]["grades"] = newGrades
+        choice = input("Choose update option: ")
 
-        print("Student Updated")
+        if choice == "1":
+            newName = input("New Name: ").strip()
+
+            recordUndo("Update Student Name")
+            markDataChanged()
+
+            student["name"] = newName
+            print("Student Name Updated")
+
+        elif choice == "2":
+            showSubjectGrades(student)
+            subjectIndex = inputStudentIndex("Select subject index to update: ")
+
+            if 0 <= subjectIndex < len(SUBJECTS):
+                newGrade = inputGrade(f"New {SUBJECTS[subjectIndex]} Grade: ")
+
+                recordUndo("Update Subject Grade")
+                markDataChanged()
+
+                grades = ensureGradeSlots(student)
+                grades[subjectIndex] = newGrade
+                print("Subject Grade Updated")
+            else:
+                print("Invalid Subject Index")
+
+        elif choice == "3":
+            showSubjectGrades(student)
+            subjectIndex = inputStudentIndex("Select subject index to clear: ")
+
+            if 0 <= subjectIndex < len(SUBJECTS):
+                recordUndo("Clear Subject Grade")
+                markDataChanged()
+
+                grades = ensureGradeSlots(student)
+                grades[subjectIndex] = 0
+                print("Subject Grade Cleared")
+            else:
+                print("Invalid Subject Index")
+
+        elif choice == "4":
+            newGrades = inputGrades(student["name"])
+
+            recordUndo("Replace All Grades")
+            markDataChanged()
+
+            student["grades"] = newGrades
+            print("All Grades Updated")
+
+        elif choice == "5":
+            print("Update Cancelled")
+
+        else:
+            print("Invalid Option")
     else:
         print("Invalid Index")
 
@@ -470,24 +597,34 @@ def searchStudent():
         print("No student data.")
         return
 
-    targetName = normalizeName(input("Search student full name: "))
-    sortedData = mergeSort(studentData, key=lambda student: student["name"])
-    student = recursiveBinarySearch(sortedData, targetName)
+    keyword = normalizeName(input("Search student name keyword: "))
 
-    if student is None:
+    if keyword == "":
+        print("Search keyword cannot be empty.")
+        return
+
+    sortedData = mergeSort(studentData, key=lambda student: student["name"])
+    matches = recursivePartialNameSearch(sortedData, keyword)
+
+    if not matches:
         print("Student Not Found")
         return
 
-    print("\n===== SEARCH RESULT =====")
-    print(f"Name   : {student['name']}")
-    print(f"Grades : {student['grades']}")
+    if len(matches) == 1:
+        showStudentDetail(matches[0])
+        return
 
-    for processedStudent in validStudentData:
-        if normalizeName(processedStudent["name"]) == targetName:
-            print(f"AVG    : {processedStudent['avg']:.2f}")
-            print(f"MAX    : {processedStudent['max']}")
-            print(f"MIN    : {processedStudent['min']}")
-            break
+    print("\n===== MATCHING STUDENTS =====")
+
+    for index, student in enumerate(matches, start=1):
+        print(f"{index}. {student['name']} - {student['grades']}")
+
+    selectedIndex = inputStudentIndex("Select result index to show detail: ")
+
+    if 0 <= selectedIndex < len(matches):
+        showStudentDetail(matches[selectedIndex])
+    else:
+        print("Invalid Result Index")
 
 
 # ======================
